@@ -1,4 +1,4 @@
-# 07 · E-commerce Business Analysis
+# E-commerce Business Analysis
 
 **Module:** SQL  **Dataset:** [Olist Brazilian E-commerce](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce): ~100k real, anonymised orders, Sep 2016 – Oct 2018 (CC BY-NC-SA 4.0). Project 05 uses the same data.  **Column profile:** [DATA_PROFILE.md](DATA_PROFILE.md)
 
