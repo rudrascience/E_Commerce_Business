@@ -261,3 +261,86 @@ SUM(method_count >= 2) AS multi_method_orders,
 ROUND(100.0 * SUM(method_count >= 2) / COUNT(*), 2) AS multi_method_pct
 FROM order_methods
 GROUP BY method_count;
+
+-- Q.15> What are the average and median delivery days by state?
+
+WITH delivery AS (
+SELECT c.customer_state,DATEDIFF(o.order_delivered_customer_date,o.order_purchase_timestamp)
+AS delivery_days FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+WHERE o.order_status = 'delivered'
+AND o.order_delivered_customer_date IS NOT NULL),
+ranked AS (SELECT *,
+ROW_NUMBER() OVER (PARTITION BY customer_state ORDER BY delivery_days) AS rn,
+COUNT(*) OVER (PARTITION BY customer_state) AS cnt FROM delivery)
+SELECT customer_state,
+ROUND(AVG(delivery_days), 2) AS avg_delivery_days,
+ROUND(AVG(CASE WHEN rn IN (FLOOR((cnt + 1) / 2),FLOOR((cnt + 2) / 2))THEN delivery_days
+END), 2)
+AS median_delivery_days,
+MAX(cnt) AS delivered_orders
+FROM ranked
+GROUP BY customer_state
+ORDER BY avg_delivery_days;
+
+-- Q.16> What is the late percentage by state and month ?
+
+SELECT c.customer_state,
+DATE_FORMAT(o.order_purchase_timestamp, '%Y-%m') AS order_month,
+COUNT(*) AS delivered_orders,
+SUM(o.order_delivered_customer_date > o.order_estimated_delivery_date) AS late_orders,
+ROUND(100.0 * SUM(o.order_delivered_customer_date > o.order_estimated_delivery_date) / COUNT(*),2)
+AS late_percentage FROM orders o JOIN customers c ON o.customer_id = c.customer_id
+WHERE o.order_status = 'delivered'
+AND o.order_delivered_customer_date IS NOT NULL
+AND o.order_estimated_delivery_date IS NOT NULL
+GROUP BY c.customer_state,
+DATE_FORMAT(o.order_purchase_timestamp, '%Y-%m')
+ORDER BY order_month, late_percentage DESC;
+
+-- Q.17> What is the average review for late vs on-time delivery?
+
+SELECT CASE WHEN o.order_delivered_customer_date > o.order_estimated_delivery_date
+THEN 'Late'
+ELSE 'On-time'
+END AS delivery_status,
+COUNT(r.review_id) AS total_reviews,
+ROUND(AVG(r.review_score), 2) AS avg_review_score,
+ROUND(100.0 * SUM(r.review_score IN (1, 2))/ COUNT(r.review_id), 2) AS low_review_pct
+FROM orders o JOIN reviews r ON o.order_id = r.order_id
+WHERE o.order_status = 'delivered'
+AND o.order_delivered_customer_date IS NOT NULL
+AND o.order_estimated_delivery_date IS NOT NULL
+GROUP BY delivery_status;
+
+-- Q.18> what is the revenue share of the top 10% seller?
+
+WITH seller_revenue AS (SELECT seller_id,
+SUM(price) AS revenue FROM items
+GROUP BY seller_id), ranked AS (SELECT *,DENSE_RANK() OVER (ORDER BY revenue DESC) AS rnk,
+COUNT(*) OVER () AS total_sellers
+FROM seller_revenue),
+top_sellers AS (SELECT * FROM ranked
+WHERE rnk <= CEIL(total_sellers * 0.10))
+SELECT
+COUNT(*) AS top_seller_count,
+ROUND(SUM(revenue), 2) AS top_seller_revenue,
+ROUND(100.0 * SUM(revenue) /(SELECT SUM(revenue) FROM seller_revenue),2) AS revenue_share_pct
+FROM top_sellers;
+
+-- Q.19> Find the sellers With average review between 3 to 5.
+
+SELECT i.seller_id,
+COUNT(DISTINCT o.order_id) AS total_orders,
+ROUND(AVG(r.review_score), 2) AS avg_review
+FROM items i JOIN reviews r ON i.order_id = r.order_id
+JOIN orders o ON i.order_id = o.order_id
+GROUP BY i.seller_id
+HAVING AVG(r.review_score) BETWEEN 3 AND 5
+ORDER BY avg_review DESC;
+
+-- Q.20> Find the lead conversion rate percentage.
+SELECT COUNT(*) AS total_orders,
+SUM(order_status = 'delivered') AS delivered_orders,
+ROUND(100.0 * SUM(order_status = 'delivered') / COUNT(*),2) AS conversion_rate_percentage
+FROM orders;
